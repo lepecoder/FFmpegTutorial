@@ -17,7 +17,11 @@ link_directories(${FFMPEG_DIR}/lib/)
 
 
 add_executable(sffplay
-        showImageWithSDL.cpp)
+#        showImageWithSDL.cpp
+#       simplest_ffmpeg_player.cpp
+#        sffplay.cpp
+        sffplay_yuv.cpp
+)
 
 #链接库
 target_link_libraries(sffplay

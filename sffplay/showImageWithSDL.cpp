@@ -19,7 +19,6 @@
 #include "iostream"
 
 
-
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
@@ -57,7 +56,7 @@ int main(int argc, char* args[]) {
     bool quit = false;
     SDL_Event e;
 
-    SDL_RenderCopy(renderer, imageTexture, NULL, NULL);  // 将texture复制到renderer
+    SDL_RenderCopy(renderer, imageTexture, nullptr, nullptr);  // 将texture复制到renderer
     SDL_RenderPresent(renderer);  // renderer上屏
     while (!quit) {
         while (SDL_PollEvent(&e)!= 0) {
