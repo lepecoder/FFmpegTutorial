@@ -21,6 +21,7 @@ add_executable(sffplay
 #       simplest_ffmpeg_player.cpp
 #        sffplay.cpp
         sffplay_yuv.cpp
+#        showYUV420pWithSDL.cpp
 )
 
 #链接库
