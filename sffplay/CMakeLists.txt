@@ -19,8 +19,9 @@ link_directories(${FFMPEG_DIR}/lib/)
 add_executable(sffplay
 #        showImageWithSDL.cpp
 #       simplest_ffmpeg_player.cpp
-        sffplay_v2.cpp
-#        SimplePlayer.c
+#        sffplay_v2.cpp
+        ref_SimplePlayer.c
+        #        SimplePlayer.c
 #        ffplay.c
         #        sdl_play_pcm.cpp
 #        SimplePlayer.c

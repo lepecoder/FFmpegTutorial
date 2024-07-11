@@ -731,7 +731,7 @@ int demux_thread(void *arg) {
     return 0;
 }
 
-int main1(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
     char *file = "88.mp4";
     printf("play 88.mp4!!!");
@@ -784,7 +784,7 @@ int main1(int argc, char *argv[]) {
                 is->quit = 1;
                 goto Destroy;
             case SDL_KEYDOWN:
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
+                if (event.key.keysym.sym == SDLK_q) {
                     is->quit = 1;
                     goto Destroy;
                 }

@@ -171,11 +171,13 @@ typedef struct Frame {
 
 typedef struct FrameQueue {
     Frame queue[FRAME_QUEUE_SIZE];
-    int rindex;
-    int windex;
+    int rindex;  // 读指针
+    int windex;  // 写指针
     int size;
     int max_size;
     int keep_last;
+    // 已经读取的数据，所以rindex是正在展示的序号，rindex+rindex+shown是还没展示的序号，感觉
+    // rindex_shown像是缓存长度
     int rindex_shown;
     SDL_mutex *mutex;
     SDL_cond *cond;
@@ -483,6 +485,9 @@ static int packet_queue_init(PacketQueue *q)
     return 0;
 }
 
+/**
+ * 清空Pakcet队列，更新序列号
+ */
 static void packet_queue_flush(PacketQueue *q)
 {
     MyAVPacketList pkt1;
@@ -576,7 +581,7 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
     int ret = AVERROR(EAGAIN);
 
     for (;;) {
-        if (d->queue->serial == d->pkt_serial) {
+        if (d->queue->serial == d->pkt_serial) {  // seek之后会刷新缓存队列，更新serial，此时d->pkt_serial还是旧序列号
             do {
                 if (d->queue->abort_request)
                     return -1;
@@ -627,7 +632,7 @@ static int decoder_decode_frame(Decoder *d, AVFrame *frame, AVSubtitle *sub) {
                 if (packet_queue_get(d->queue, d->pkt, 1, &d->pkt_serial) < 0)
                     return -1;
                 if (old_serial != d->pkt_serial) {
-                    avcodec_flush_buffers(d->avctx);
+                    avcodec_flush_buffers(d->avctx);  // 序列号不同，刷新解码器缓存
                     d->finished = 0;
                     d->next_pts = d->start_pts;
                     d->next_pts_tb = d->start_pts_tb;
@@ -712,21 +717,33 @@ static void frame_queue_signal(FrameQueue *f)
     SDL_UnlockMutex(f->mutex);
 }
 
+/**
+ * 返回当前要展示的Frame
+ */
 static Frame *frame_queue_peek(FrameQueue *f)
 {
     return &f->queue[(f->rindex + f->rindex_shown) % f->max_size];
 }
 
+/**
+ * 返回要展示的下一帧
+ */
 static Frame *frame_queue_peek_next(FrameQueue *f)
 {
     return &f->queue[(f->rindex + f->rindex_shown + 1) % f->max_size];
 }
 
+/**
+ * 上一次展示的Frame
+ */
 static Frame *frame_queue_peek_last(FrameQueue *f)
 {
     return &f->queue[f->rindex];
 }
 
+/**
+ * 下一个可写的Frame
+ */
 static Frame *frame_queue_peek_writable(FrameQueue *f)
 {
     /* wait until we have space to put a new frame */
@@ -743,6 +760,9 @@ static Frame *frame_queue_peek_writable(FrameQueue *f)
     return &f->queue[f->windex];
 }
 
+/**
+ * 和frame_queue_peek的区别是可以确保返回的Frame是可以立即读取的，里面的数据已经准备好
+ */
 static Frame *frame_queue_peek_readable(FrameQueue *f)
 {
     /* wait until we have a readable a new frame */
@@ -759,6 +779,9 @@ static Frame *frame_queue_peek_readable(FrameQueue *f)
     return &f->queue[(f->rindex + f->rindex_shown) % f->max_size];
 }
 
+/**
+ * 写完了Frame，移动指针到下一个可写数据
+ */
 static void frame_queue_push(FrameQueue *f)
 {
     if (++f->windex == f->max_size)
@@ -769,6 +792,9 @@ static void frame_queue_push(FrameQueue *f)
     SDL_UnlockMutex(f->mutex);
 }
 
+/**
+ * 读完了数据，移动到下一个可读Frame
+ */
 static void frame_queue_next(FrameQueue *f)
 {
     if (f->keep_last && !f->rindex_shown) {
@@ -889,6 +915,11 @@ static void get_sdl_pix_fmt_and_blendmode(int format, Uint32 *sdl_pix_fmt, SDL_B
     }
 }
 
+/**
+ * 使用AVFrame更新Texture，
+ * 如果frame的format不知道，就使用SwsContext转换成RGBA格式渲染，
+ * 如果frame的format是IYUV格式，就可以使用SDL_UpdateYUVTexture更新
+ */
 static int upload_texture(SDL_Texture **tex, AVFrame *frame, struct SwsContext **img_convert_ctx) {
     int ret = 0;
     Uint32 sdl_pix_fmt;
@@ -1489,6 +1520,7 @@ static void stream_toggle_pause(VideoState *is)
     is->paused = is->audclk.paused = is->vidclk.paused = is->extclk.paused = !is->paused;
 }
 
+/* 暂停is的播放 */
 static void toggle_pause(VideoState *is)
 {
     stream_toggle_pause(is);
@@ -1967,6 +1999,9 @@ static int audio_decode_frame(VideoState *is)
                                            af->frame->nb_samples,
                                            af->frame->format, 1);
 
+    /**
+     * 当前Frame每个声道的采样数
+     */
     wanted_nb_samples = synchronize_audio(is, af->frame->nb_samples);
 
     if (af->frame->format        != is->audio_src.fmt            ||
@@ -2065,6 +2100,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         if (len1 > len)
             len1 = len;
         if (!is->muted && is->audio_buf && is->audio_volume == SDL_MIX_MAXVOLUME)
+            /** 把audio_buf里的数据拷贝到stream内存 */
             memcpy(stream, (uint8_t *)is->audio_buf + is->audio_buf_index, len1);
         else {
             memset(stream, 0, len1);
@@ -2073,6 +2109,7 @@ static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
         }
         len -= len1;
         stream += len1;
+        // 更新len和stream，继续缓存继续读取，直到满足uSDL_Audio设置的len长度、
         is->audio_buf_index += len1;
     }
     is->audio_write_buf_size = is->audio_buf_size - is->audio_buf_index;
@@ -2531,7 +2568,7 @@ static int read_thread(void *arg)
             if (ret < 0) {
                 av_log(NULL, AV_LOG_ERROR,
                        "%s: error while seeking\n", is->ic->url);
-            } else {
+            } else {  // 有跳转操作就刷新缓存队列
                 if (is->audio_stream >= 0)
                     packet_queue_flush(&is->audioq);
                 if (is->subtitle_stream >= 0)
